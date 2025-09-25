@@ -3,14 +3,6 @@ import hashlib
 import pandas as pd
 import streamlit as st
 
-def _names_table(names, title):
-    st.markdown(f"**{title}**")
-    if not isinstance(names, list):
-        names = []
-    if names:
-        st.table(pd.DataFrame({"Differential Diagnosis": names}))
-    else:
-        st.write("—")
 
 def _row_toggle_key(row, suffix: str) -> str:
     # file_name 기반 키 (행마다 독립 토글)
@@ -18,30 +10,53 @@ def _row_toggle_key(row, suffix: str) -> str:
     h = hashlib.md5(fid.encode("utf-8")).hexdigest()[:8]
     return f"{suffix}_{h}"
 
+
+
 def render_core_view(row: pd.Series):
     st.markdown("### Core View")
 
-    # ── 모델 DDX 표: 기본 감춤, 버튼으로 토글 ───────────────────────────
-    toggle_key = _row_toggle_key(row, "SHOW_MODEL_DDX")
-    if toggle_key not in st.session_state:
-        st.session_state[toggle_key] = False
+    # 모델 DDX 표 토글 버튼
+    tkey = _row_toggle_key(row, "SHOW_MODEL_DDX")
+    if tkey not in st.session_state:
+        st.session_state[tkey] = False
+    label = "Show model DDX lists" if not st.session_state[tkey] else "Hide model DDX lists"
+    if st.button(label, key=f"{tkey}_btn", use_container_width=True):
+        st.session_state[tkey] = not st.session_state[tkey]
 
-    # 버튼을 전체 폭으로 크게, 줄바꿈 없이
-    btn_label = "Show model DDX lists" if not st.session_state[toggle_key] else "Hide model DDX lists"
-    if st.button(btn_label, use_container_width=True):
-        st.session_state[toggle_key] = not st.session_state[toggle_key]
+    if st.session_state[tkey]:
+        lc, rc = st.columns(2)
+        with lc:
+            st.markdown("**Model (Base) — Expected + Differentials**")
+            rows = row.get("__ddx_table_base__") or []
+            if rows:
+                df_tbl = pd.DataFrame(rows)
+                # Tier 컬럼 제거
+                if "Tier" in df_tbl.columns:
+                    df_tbl = df_tbl.drop(columns=["Tier"])
+                st.table(df_tbl)
+            else:
+                st.write("—")
 
-    # 표시 상태일 때만 표 출력
-    if st.session_state[toggle_key]:
-        left, right = st.columns(2)
-        with left:
-            _names_table(row.get("__ddx_names_base__"), "Model (Base) — Differential Diagnoses")
-        with right:
-            _names_table(row.get("__ddx_names_applied__"), "Model (Applied) — Differential Diagnoses")
+        with rc:
+            st.markdown("**Model (Applied) — Expected + Differentials**")
+            rows = row.get("__ddx_table_applied__") or []
+            if rows:
+                df_tbl = pd.DataFrame(rows)
+                if "Tier" in df_tbl.columns:
+                    df_tbl = df_tbl.drop(columns=["Tier"])
+                st.table(df_tbl)
+            else:
+                st.write("—")
 
-    # ── 하단: 원본 초진기록 크게 ─────────────────────────────────────────
+    # 하단 원본 초진기록
     st.markdown("**원본 초진기록**")
-    st.text_area("raw_visit", row.get("원본 초진기록", ""), height=420, label_visibility="collapsed")
+    st.text_area(
+        "raw_visit",
+        row.get("원본 초진기록", row.get("현병력-Free Text#13", "")),
+        height=420,
+        label_visibility="collapsed",
+    )
+
 
 def render_optional_sections(row, *, show_past, show_current, show_asso_sx, show_asso_dx, show_asso_tx):
     any_flag = any([show_past, show_current, show_asso_sx, show_asso_dx, show_asso_tx])
